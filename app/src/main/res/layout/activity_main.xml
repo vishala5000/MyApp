@@ -19,12 +19,7 @@
             app:resize_mode="fill"
             app:use_controller="false" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="2dp"
-            android:background="#FFFFFF" />
-
-        <!-- BOTTOM: Live Front Camera -->
+        <!-- BOTTOM: Live Front Camera (No white line separating them) -->
         <androidx.camera.view.PreviewView
             android:id="@+id/previewViewBottom"
             android:layout_width="match_parent"
