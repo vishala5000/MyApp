@@ -36,7 +36,10 @@ jobs:
 
     - name: Sign APK with apksigner
       run: |
-        $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.keystore --ks-key-alias mykey --ks-pass pass:password --key-pass pass:password --out app-release-signed.apk app/build/outputs/apk/debug/app-debug.apk
+        # Dynamically find the latest build-tools directory to prevent version mismatch errors
+        BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/*/ 2>/dev/null | sort -V | tail -n 1)
+        echo "Using build tools: $BUILD_TOOLS_DIR"
+        ${BUILD_TOOLS_DIR}apksigner sign --ks release.keystore --ks-key-alias mykey --ks-pass pass:password --key-pass pass:password --out app-release-signed.apk app/build/outputs/apk/debug/app-debug.apk
 
     - name: Upload Signed APK
       uses: actions/upload-artifact@v4
