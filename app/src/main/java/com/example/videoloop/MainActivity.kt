@@ -31,7 +31,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSelectVideo: Button
     
     private var exoPlayer: ExoPlayer? = null
-    private var cameraProvider: ProcessCameraProvider? = null
     private lateinit var cameraExecutor: ExecutorService
     
     private var isVideoSelected = false
@@ -56,6 +55,8 @@ class MainActivity : AppCompatActivity() {
             selectButtonContainer.visibility = android.view.View.GONE
             isVideoSelected = true
             playVideo(uri)
+            // Restart camera immediately after picker closes to prevent black screen
+            startCamera() 
         } else {
             Toast.makeText(this, "No video selected. Please try again.", Toast.LENGTH_SHORT).show()
         }
@@ -79,8 +80,19 @@ class MainActivity : AppCompatActivity() {
             pickMedia.launch("video/*")
         }
 
-        // Check permissions on every app start
         checkPermissions()
+    }
+
+    // THIS IS THE MAGIC FIX: Always restart the camera when the app becomes visible
+    override fun onResume() {
+        super.onResume()
+        if (hasCameraPermission()) {
+            startCamera()
+        }
+    }
+
+    private fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun checkPermissions() {
@@ -89,19 +101,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (permissionsToRequest.isEmpty()) {
-            // Permissions already granted (This happens on 2nd run and beyond)
             initializeApp()
         } else {
-            // Ask for permissions (This happens on 1st run)
             requestPermissions.launch(permissionsToRequest.toTypedArray())
         }
     }
 
     private fun initializeApp() {
-        // ALWAYS start the camera once permissions are confirmed
-        startCamera()
-        
-        // Launch video picker if no video is loaded yet
         if (!isVideoSelected) {
             pickMedia.launch("video/*")
         }
@@ -127,33 +133,22 @@ class MainActivity : AppCompatActivity() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             try {
-                cameraProvider = cameraProviderFuture.get()
-                bindCameraUseCases()
+                val cameraProvider = cameraProviderFuture.get()
+                
+                // CRITICAL: Unbind all previous states to guarantee no black screen
+                cameraProvider.unbindAll()
+                
+                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewViewBottom.surfaceProvider)
+                }
+                
+                // Bind fresh camera to the current lifecycle
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview)
             } catch (e: Exception) {
-                Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
             }
         }, ContextCompat.getMainExecutor(this))
-    }
-
-    private fun bindCameraUseCases() {
-        val cameraProvider = cameraProvider ?: return
-
-        // Select front-facing camera
-        val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-
-        // Set up the preview use case
-        val preview = Preview.Builder().build().also {
-            it.setSurfaceProvider(previewViewBottom.surfaceProvider)
-        }
-
-        try {
-            // Unbind all use cases before rebinding (Prevents crashes on multiple starts)
-            cameraProvider.unbindAll()
-            // Bind the camera to the lifecycle
-            cameraProvider.bindToLifecycle(this, cameraSelector, preview)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to bind camera: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
     }
 
     override fun onDestroy() {
