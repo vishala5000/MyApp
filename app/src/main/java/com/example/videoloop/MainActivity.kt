@@ -1,14 +1,10 @@
 package com.example.videoloop
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -16,22 +12,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var videoViewBottom: FitVideoView
     private var isPlaying = false
 
-    private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
-    } else {
-        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-    }
-
-    private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            launchVideoPicker()
-        } else {
-            Toast.makeText(this, "Storage permission is required to select a video", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    // GetContent opens the system media picker. It does NOT require storage permissions!
+    private val pickMedia = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             playVideo(uri)
         } else {
@@ -46,10 +28,12 @@ class MainActivity : AppCompatActivity() {
         videoViewTop = findViewById(R.id.videoViewTop)
         videoViewBottom = findViewById(R.id.videoViewBottom)
 
-        videoViewTop.setOnClickListener { checkPermissionsAndLaunch() }
-        videoViewBottom.setOnClickListener { checkPermissionsAndLaunch() }
+        // Tap anywhere on the video views to select a new video
+        videoViewTop.setOnClickListener { launchVideoPicker() }
+        videoViewBottom.setOnClickListener { launchVideoPicker() }
 
-        checkPermissionsAndLaunch()
+        // Launch picker automatically on first start
+        launchVideoPicker()
     }
 
     override fun onPause() {
@@ -68,20 +52,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkPermissionsAndLaunch() {
-        val permissionsToRequest = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (permissionsToRequest.isEmpty()) {
-            launchVideoPicker()
-        } else {
-            requestPermissions.launch(permissionsToRequest.toTypedArray())
-        }
-    }
-
     private fun launchVideoPicker() {
-        pickMedia.launch(ActivityResultContracts.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+        // "video/*" filters the system picker to show only videos
+        pickMedia.launch("video/*")
     }
 
     private fun playVideo(uri: Uri) {
@@ -98,6 +71,7 @@ class MainActivity : AppCompatActivity() {
             videoViewBottom.start()
         }
         
+        // Fallback for some devices
         videoViewTop.setOnCompletionListener { it.start() }
         videoViewBottom.setOnCompletionListener { it.start() }
         
