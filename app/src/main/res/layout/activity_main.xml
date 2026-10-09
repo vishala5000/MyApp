@@ -5,12 +5,12 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- Top and Bottom Video Views -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
+        <!-- TOP: Uploaded Video (Looping) -->
         <androidx.media3.ui.PlayerView
             android:id="@+id/playerViewTop"
             android:layout_width="match_parent"
@@ -24,16 +24,16 @@
             android:layout_height="2dp"
             android:background="#FFFFFF" />
 
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/playerViewBottom"
+        <!-- BOTTOM: Live Front Camera -->
+        <androidx.camera.view.PreviewView
+            android:id="@+id/previewViewBottom"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            app:resize_mode="fill"
-            app:use_controller="false" />
+            app:scaleType="fillCenter" />
     </LinearLayout>
 
-    <!-- Prominent Select Button Overlay -->
+    <!-- Select Video Button Overlay -->
     <LinearLayout
         android:id="@+id/selectButtonContainer"
         android:layout_width="wrap_content"
