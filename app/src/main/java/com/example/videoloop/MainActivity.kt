@@ -6,22 +6,29 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var videoViewTop: VideoView
-    private lateinit var videoViewBottom: VideoView
+    private lateinit var videoViewTop: FitVideoView
+    private lateinit var videoViewBottom: FitVideoView
     private var isPlaying = false
 
     private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_MEDIA_VIDEO)
+        arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
     } else {
-        arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_EXTERNAL_STORAGE)
+        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+    private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            launchVideoPicker()
+        } else {
+            Toast.makeText(this, "Storage permission is required to select a video", Toast.LENGTH_LONG).show()
+        }
     }
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -39,11 +46,10 @@ class MainActivity : AppCompatActivity() {
         videoViewTop = findViewById(R.id.videoViewTop)
         videoViewBottom = findViewById(R.id.videoViewBottom)
 
-        // Tap anywhere on the video views to select a new video
-        videoViewTop.setOnClickListener { launchVideoPicker() }
-        videoViewBottom.setOnClickListener { launchVideoPicker() }
+        videoViewTop.setOnClickListener { checkPermissionsAndLaunch() }
+        videoViewBottom.setOnClickListener { checkPermissionsAndLaunch() }
 
-        checkAndRequestPermissions()
+        checkPermissionsAndLaunch()
     }
 
     override fun onPause() {
@@ -62,28 +68,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkAndRequestPermissions() {
-        val listPermissionsNeeded = mutableListOf<String>()
-        for (p in requiredPermissions) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                listPermissionsNeeded.add(p)
-            }
+    private fun checkPermissionsAndLaunch() {
+        val permissionsToRequest = requiredPermissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (listPermissionsNeeded.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, listPermissionsNeeded.toTypedArray(), 101)
-        } else {
-            launchVideoPicker()
-        }
-    }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 101) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                launchVideoPicker()
-            } else {
-                Toast.makeText(this, "Permissions required to access video", Toast.LENGTH_LONG).show()
-            }
+        if (permissionsToRequest.isEmpty()) {
+            launchVideoPicker()
+        } else {
+            requestPermissions.launch(permissionsToRequest.toTypedArray())
         }
     }
 
@@ -95,10 +88,6 @@ class MainActivity : AppCompatActivity() {
         videoViewTop.setVideoURI(uri)
         videoViewBottom.setVideoURI(uri)
 
-        // Endless looping setup
-        videoViewTop.setOnCompletionListener { it.start() }
-        videoViewBottom.setOnCompletionListener { it.start() }
-
         videoViewTop.setOnPreparedListener { mp ->
             mp.isLooping = true
             videoViewTop.start()
@@ -108,6 +97,9 @@ class MainActivity : AppCompatActivity() {
             mp.isLooping = true
             videoViewBottom.start()
         }
+        
+        videoViewTop.setOnCompletionListener { it.start() }
+        videoViewBottom.setOnCompletionListener { it.start() }
         
         isPlaying = true
     }
