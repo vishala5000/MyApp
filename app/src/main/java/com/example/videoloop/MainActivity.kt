@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
@@ -46,7 +45,7 @@ class MainActivity : AppCompatActivity() {
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         val allGranted = permissions.values.all { it }
         if (allGranted) {
-            startCamera() // Start camera immediately when permissions are granted
+            initializeApp()
         } else {
             Toast.makeText(this, "Permissions denied. App needs Camera/Storage access.", Toast.LENGTH_LONG).show()
         }
@@ -54,7 +53,7 @@ class MainActivity : AppCompatActivity() {
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
-            selectButtonContainer.visibility = View.GONE
+            selectButtonContainer.visibility = android.view.View.GONE
             isVideoSelected = true
             playVideo(uri)
         } else {
@@ -77,23 +76,34 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         btnSelectVideo.setOnClickListener {
-            checkPermissionsAndLaunch()
+            pickMedia.launch("video/*")
         }
 
-        checkPermissionsAndLaunch()
+        // Check permissions on every app start
+        checkPermissions()
     }
 
-    private fun checkPermissionsAndLaunch() {
+    private fun checkPermissions() {
         val permissionsToRequest = requiredPermissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (permissionsToRequest.isEmpty()) {
-            if (!isVideoSelected) {
-                pickMedia.launch("video/*")
-            }
+            // Permissions already granted (This happens on 2nd run and beyond)
+            initializeApp()
         } else {
+            // Ask for permissions (This happens on 1st run)
             requestPermissions.launch(permissionsToRequest.toTypedArray())
+        }
+    }
+
+    private fun initializeApp() {
+        // ALWAYS start the camera once permissions are confirmed
+        startCamera()
+        
+        // Launch video picker if no video is loaded yet
+        if (!isVideoSelected) {
+            pickMedia.launch("video/*")
         }
     }
 
@@ -137,7 +147,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         try {
-            // Unbind all use cases before rebinding
+            // Unbind all use cases before rebinding (Prevents crashes on multiple starts)
             cameraProvider.unbindAll()
             // Bind the camera to the lifecycle
             cameraProvider.bindToLifecycle(this, cameraSelector, preview)
