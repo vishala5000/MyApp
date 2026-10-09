@@ -12,14 +12,19 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var videoViewTop: FitVideoView
-    private lateinit var videoViewBottom: FitVideoView
+    private lateinit var playerViewTop: PlayerView
+    private lateinit var playerViewBottom: PlayerView
     private lateinit var selectButtonContainer: LinearLayout
     private lateinit var btnSelectVideo: Button
     
+    private var exoPlayer: ExoPlayer? = null
     private var isPlaying = false
 
     private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -41,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         if (allGranted) {
             launchVideoPicker()
         } else {
-            Toast.makeText(this, "Permissions denied. App needs Storage/Camera access to work.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Permissions denied. App needs access to work.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -58,41 +63,38 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        videoViewTop = findViewById(R.id.videoViewTop)
-        videoViewBottom = findViewById(R.id.videoViewBottom)
+        playerViewTop = findViewById(R.id.playerViewTop)
+        playerViewBottom = findViewById(R.id.playerViewBottom)
         selectButtonContainer = findViewById(R.id.selectButtonContainer)
         btnSelectVideo = findViewById(R.id.btnSelectVideo)
-
-        // Setup error listeners to prevent silent black screens
-        setupErrorHandling(videoViewTop, "Top")
-        setupErrorHandling(videoViewBottom, "Bottom")
 
         btnSelectVideo.setOnClickListener {
             checkPermissionsAndLaunch()
         }
         
-        // Also allow tapping the video areas to change video later
-        videoViewTop.setOnClickListener { checkPermissionsAndLaunch() }
-        videoViewBottom.setOnClickListener { checkPermissionsAndLaunch() }
+        // Allow tapping the video areas to change video later
+        playerViewTop.setOnClickListener { checkPermissionsAndLaunch() }
+        playerViewBottom.setOnClickListener { checkPermissionsAndLaunch() }
 
-        // Check permissions on first launch
         checkPermissionsAndLaunch()
     }
 
     override fun onPause() {
         super.onPause()
-        if (isPlaying) {
-            videoViewTop.pause()
-            videoViewBottom.pause()
-        }
+        exoPlayer?.pause()
     }
 
     override fun onResume() {
         super.onResume()
         if (isPlaying) {
-            videoViewTop.start()
-            videoViewBottom.start()
+            exoPlayer?.play()
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        exoPlayer?.release()
+        exoPlayer = null
     }
 
     private fun checkPermissionsAndLaunch() {
@@ -113,36 +115,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun playVideo(uri: Uri) {
         try {
-            // Grant temporary read permission for the URI
             contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (e: Exception) {
             // Ignore if already granted or not persistable
         }
 
-        videoViewTop.setVideoURI(uri)
-        videoViewBottom.setVideoURI(uri)
-
-        videoViewTop.setOnPreparedListener { mp ->
-            mp.isLooping = true
-            mp.setVolume(1f, 1f) // Ensure sound is on
-            videoViewTop.start()
+        // Initialize ExoPlayer for flawless playback
+        exoPlayer = ExoPlayer.Builder(this).build().apply {
+            playWhenReady = true
+            repeatMode = Player.REPEAT_MODE_ONE // Endless looping
+            
+            val mediaItem = MediaItem.fromUri(uri)
+            setMediaItem(mediaItem)
+            prepare()
         }
         
-        videoViewBottom.setOnPreparedListener { mp ->
-            mp.isLooping = true
-            mp.setVolume(1f, 1f)
-            videoViewBottom.start()
-        }
-        
+        // Attach the SAME player to both views for perfect sync
+        playerViewTop.player = exoPlayer
+        playerViewBottom.player = exoPlayer
         isPlaying = true
-    }
-
-    private fun setupErrorHandling(videoView: FitVideoView, position: String) {
-        videoView.setOnErrorListener { _, what, extra ->
-            Toast.makeText(this, "Error loading $position video (Code: $what, $extra). Try a different video.", Toast.LENGTH_LONG).show()
-            selectButtonContainer.visibility = View.VISIBLE // Show button again on error
-            isPlaying = false
-            true
-        }
     }
 }
