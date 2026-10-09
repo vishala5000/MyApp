@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -24,7 +25,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var selectButtonContainer: LinearLayout
     private lateinit var btnSelectVideo: Button
     
-    private var exoPlayer: ExoPlayer? = null
+    // We now use TWO separate players to render the video on both screens
+    private var playerTop: ExoPlayer? = null
+    private var playerBottom: ExoPlayer? = null
     private var isPlaying = false
 
     private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -52,7 +55,7 @@ class MainActivity : AppCompatActivity() {
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
-            selectButtonContainer.visibility = View.GONE // Hide button when video is chosen
+            selectButtonContainer.visibility = View.GONE
             playVideo(uri)
         } else {
             Toast.makeText(this, "No video selected. Please try again.", Toast.LENGTH_SHORT).show()
@@ -63,6 +66,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // THIS KEEPS THE SCREEN ON WHILE THE APP IS OPEN
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         playerViewTop = findViewById(R.id.playerViewTop)
         playerViewBottom = findViewById(R.id.playerViewBottom)
         selectButtonContainer = findViewById(R.id.selectButtonContainer)
@@ -72,7 +78,6 @@ class MainActivity : AppCompatActivity() {
             checkPermissionsAndLaunch()
         }
         
-        // Allow tapping the video areas to change video later
         playerViewTop.setOnClickListener { checkPermissionsAndLaunch() }
         playerViewBottom.setOnClickListener { checkPermissionsAndLaunch() }
 
@@ -81,20 +86,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        exoPlayer?.pause()
+        playerTop?.pause()
+        playerBottom?.pause()
     }
 
     override fun onResume() {
         super.onResume()
         if (isPlaying) {
-            exoPlayer?.play()
+            playerTop?.play()
+            playerBottom?.play()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        exoPlayer?.release()
-        exoPlayer = null
+        // Clean up both players to prevent memory leaks
+        playerTop?.release()
+        playerBottom?.release()
+        playerTop = null
+        playerBottom = null
     }
 
     private fun checkPermissionsAndLaunch() {
@@ -117,22 +127,35 @@ class MainActivity : AppCompatActivity() {
         try {
             contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (e: Exception) {
-            // Ignore if already granted or not persistable
+            // Ignore
         }
 
-        // Initialize ExoPlayer for flawless playback
-        exoPlayer = ExoPlayer.Builder(this).build().apply {
+        // Release previous players if the user selects a new video
+        playerTop?.release()
+        playerBottom?.release()
+
+        // 1. Create TOP Player (Muted to prevent double audio echo)
+        playerTop = ExoPlayer.Builder(this).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            repeatMode = Player.REPEAT_MODE_ONE // Endless loop
             playWhenReady = true
-            repeatMode = Player.REPEAT_MODE_ONE // Endless looping
-            
-            val mediaItem = MediaItem.fromUri(uri)
-            setMediaItem(mediaItem)
+            volume = 0f 
             prepare()
         }
         
-        // Attach the SAME player to both views for perfect sync
-        playerViewTop.player = exoPlayer
-        playerViewBottom.player = exoPlayer
+        // 2. Create BOTTOM Player (Audio enabled)
+        playerBottom = ExoPlayer.Builder(this).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            repeatMode = Player.REPEAT_MODE_ONE // Endless loop
+            playWhenReady = true
+            volume = 1f
+            prepare()
+        }
+
+        // Attach each player to its respective view
+        playerViewTop.player = playerTop
+        playerViewBottom.player = playerBottom
+        
         isPlaying = true
     }
 }
